@@ -21,7 +21,7 @@ impl Dicer {
             };
         }
         let total: f64 = options.iter().map(|&(_, w)| w).sum();
-        let mut x = self.gen_range(0.0..total);
+        let mut x = self.random_range(0.0..total);
         for &(item, w) in &options {
             x -= w;
             if x <= 0.0 {

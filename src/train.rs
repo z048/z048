@@ -51,7 +51,7 @@ impl Train {
         while self.num_round == 0 || round < self.num_round {
             let mut games = Vec::with_capacity(self.play_games);
             for _ in 0..self.play_games {
-                let mut board = Board::from(dicer.r#gen::<u64>());
+                let mut board = Board::from(dicer.random::<u64>());
                 let mut afters: Vec<(Board, f64)> = Vec::new();
                 let mut befores: Vec<(Board, f64)> = Vec::new();
                 let mut ply = 0usize;
@@ -99,7 +99,7 @@ impl Train {
 
             let mut losses = Vec::with_capacity(self.train_steps);
             for _ in 0..self.train_steps {
-                let idx: Vec<usize> = (0..self.batch_size).map(|_| dicer.gen_range(0..rows.len())).collect();
+                let idx: Vec<usize> = (0..self.batch_size).map(|_| dicer.random_range(0..rows.len())).collect();
                 let board: Vec<Board> = idx.iter().flat_map(|&i| rows[i].0.symmetries()).collect();
                 let head: Vec<f32> = idx.iter().flat_map(|&i| [rows[i].1; 8]).collect();
                 let target: Vec<f32> = idx.iter().flat_map(|&i| [rows[i].2; 8]).collect();
