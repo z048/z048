@@ -5,24 +5,26 @@ use clap::Parser;
 use rand::Rng;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use z048::Board;
 use z048::Dicer;
 use z048::Rater;
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long, default_value_t = 100)]
-    rounds: u64,
-    #[arg(long, default_value_t = 0x2048_2048_2048_2048)]
-    seed: u64,
-    #[arg(long, default_value = "models.safetensors")]
+    #[arg(long)]
     slide_rater: PathBuf,
+    #[arg(long)]
+    spawn_rater: PathBuf,
     #[arg(long, default_value_t = 2)]
     slide_depth: u8,
-    #[arg(long, default_value = "models.safetensors")]
-    spawn: PathBuf,
     #[arg(long, default_value_t = 2)]
     spawn_depth: u8,
+    #[arg(long, default_value_t = 128)]
+    rounds: u64,
+    #[arg(long, default_value_t = SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock is before the unix epoch").as_nanos() as u64)]
+    seed: u64,
 }
 
 fn read_varmap(path: &Path) -> VarMap {
@@ -48,7 +50,7 @@ fn load_rater(path: &Path, seed: u64) -> Rater {
 fn main() {
     let args = Args::parse();
     let slide = load_rater(&args.slide_rater, args.seed);
-    let spawn = load_rater(&args.spawn, args.seed);
+    let spawn = load_rater(&args.spawn_rater, args.seed);
     let mut results: Vec<(f64, usize, u64)> = Vec::with_capacity(args.rounds as usize);
     for round in 0..args.rounds {
         let mut dicer = Dicer::from(args.seed + round);
