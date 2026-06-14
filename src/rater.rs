@@ -169,7 +169,7 @@ impl From<(Vec<usize>, u64, Device)> for Rater {
             for i in 0..d.len() - 1 {
                 let w: Vec<f32> = if i + 2 < d.len() {
                     let lim = if i == 0 { (6.0f32 / 16.0).sqrt() } else { (6.0f32 / d[i] as f32).sqrt() };
-                    (0..d[i] * d[i + 1]).map(|_| dicer.gen_range(-lim..lim)).collect()
+                    (0..d[i] * d[i + 1]).map(|_| dicer.random_range(-lim..lim)).collect()
                 } else {
                     vec![0.0; d[i] * d[i + 1]]
                 };

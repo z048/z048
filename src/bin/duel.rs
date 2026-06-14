@@ -32,7 +32,7 @@ fn main() {
     let mut results: Vec<(f64, usize, u64)> = Vec::with_capacity(args.rounds as usize);
     for round in 0..args.rounds {
         let mut dicer = Dicer::from(args.seed + round);
-        let mut board = Board::from(dicer.r#gen::<u64>());
+        let mut board = Board::from(dicer.random::<u64>());
         let mut plies = 0usize;
         let final_board: Board = loop {
             let sl = slide.sample_slide(board, args.slide_depth, 0.0, &mut dicer);

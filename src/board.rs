@@ -142,7 +142,7 @@ impl From<u64> for Board {
         let mut dicer = Dicer::from(value);
         let mut board = Self::default();
         for c in (0..16).choose_multiple(dicer.deref_mut(), 2) {
-            board = board.spawn((c, dicer.gen_range(1..=2u8)).into());
+            board = board.spawn((c, dicer.random_range(1..=2u8)).into());
         }
         board
     }
