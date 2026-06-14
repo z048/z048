@@ -20,8 +20,9 @@ Learning is done by **TD(λ) self-play**. A small two-head value network (built
 on [candle](https://github.com/huggingface/candle), CPU) predicts state values,
 the search uses those predictions to sample moves, and the resulting
 trajectories produce λ-return targets that are regressed back into the network.
-Three binaries cover the lifecycle: `mint` initializes a fresh network, `dojo`
-trains it via self-play, and `duel` evaluates it.
+Four binaries cover the lifecycle: `mint` initializes a fresh network, `dojo`
+trains it via self-play, `duel` evaluates it headlessly, and `term` plays an
+interactive game in the terminal (human and/or AI on either side).
 
 ## How it works
 
@@ -114,7 +115,8 @@ loss, optimized with AdamW.
 | `src/lib.rs`      | Crate root tying the modules together                                                                  |
 | `src/bin/mint.rs` | Binary: initialize a fresh, untrained checkpoint                                                       |
 | `src/bin/dojo.rs` | Binary: self-play training driver (saves after each round)                                             |
-| `src/bin/duel.rs` | Binary: fixed-seed evaluation arena (no learning)                                                      |
+| `src/bin/duel.rs` | Binary: net-vs-net evaluation arena (no learning)                                                      |
+| `src/bin/term.rs` | Binary: interactive terminal arena (human and/or AI on each side) |
 
 ## Requirements
 
@@ -130,7 +132,7 @@ No GPU is required or used; all tensor work runs on the CPU.
 ## Build
 
 ```bash
-# Standard release build of all three binaries
+# Standard release build of all four binaries
 cargo build --release
 
 # Recommended: enable native CPU optimizations for faster search and training
@@ -142,8 +144,8 @@ RUSTFLAGS="-C target-cpu=native" cargo build --release
 A typical end-to-end flow: **mint** a fresh network, **train** it with `dojo`,
 then **evaluate** with `duel`.
 
-> **Default checkpoint paths:** `mint` and `dojo` (`--rater`) and `duel`
-> (`--slide-rater` / `--spawn`) all default to `models.safetensors`.
+> **Checkpoint paths are required:** `mint` / `dojo` (`--rater`) and `duel`
+> (`--slide-rater` / `--spawn-rater`) have no default — pass a path explicitly.
 
 ### 1. Mint a fresh network
 
@@ -176,19 +178,41 @@ round 12: phi_final mean 14.213 median 14.000 loss 0.04210 -> 0.03980
 
 ### 3. Evaluate
 
-`duel` plays the `--slide-rater` net (the player) against the `--spawn` net (the
-adversarial spawner). Each side is loaded independently, so you can pit
+`duel` plays the `--slide-rater` net (the player) against the `--spawn-rater` net
+(the adversarial spawner). Each side is loaded independently, so you can pit
 different checkpoints against each other:
 
 ```bash
 RUSTFLAGS="-C target-cpu=native" cargo run --release --bin duel -- \
   --slide-rater models.safetensors --slide-depth 2 \
-  --spawn models.safetensors --spawn-depth 2 \
-  --rounds 100
+  --spawn-rater models.safetensors --spawn-depth 2 \
+  --rounds 128
 ```
 
 If either checkpoint file is missing, `duel` falls back to a fresh untrained net
 for that side (`V ≡ 0`, i.e. ΔΦ-greedy minimax) and notes this on stderr.
+
+### 4. Play interactively
+
+`term` runs a screen-refreshing game where the slide side is the player and the
+spawn side the adversary. Give a side a `--*-rater` to let a network play it, or
+omit it to play that side yourself — so any of PvE / PvP / EvE works:
+
+```bash
+# watch two nets play (EvE)
+RUSTFLAGS="-C target-cpu=native" cargo run --release --bin term -- \
+  --slide-rater models.safetensors --spawn-rater models.safetensors
+
+# play the slide side yourself against a net spawner (PvE)
+RUSTFLAGS="-C target-cpu=native" cargo run --release --bin term -- \
+  --spawn-rater models.safetensors
+```
+
+Human controls: arrow keys slide; for a spawn, arrows move the cursor, `[` / `]`
+pick the 2/4 tile, and space places it; `q` quits. Flags: `--slide-depth` /
+`--spawn-depth` (default `4`), `--slide-tau` / `--spawn-tau` (default `0`),
+`--seed` (defaults to the wall clock), and `--delay` (ms between AI moves,
+default `80`). Requires a Unix/macOS terminal (`stty`).
 
 ## Training options
 
@@ -197,7 +221,7 @@ All flags below belong to the `Train` configuration flattened into `dojo` (plus
 
 | Flag             | Default              | Description                                                   |
 | ---------------- | -------------------- | ------------------------------------------------------------- |
-| `--rater`        | `models.safetensors` | Checkpoint file to load and save (dojo-specific)              |
+| `--rater`        | _required_           | Checkpoint file to load and save (dojo-specific)              |
 | `--num-round`    | `0`                  | Training rounds to run (`0` = loop forever)                   |
 | `--play-games`   | `64`                 | Self-play games generated per round                           |
 | `--search-depth` | `2`                  | Alpha-beta search depth used during move sampling             |
@@ -220,7 +244,7 @@ decreasing with ply toward the floor `tau_k`.
 
 ## Evaluation (duel)
 
-`duel` runs deterministic, greedy (`τ = 0`), fixed-seed games (round `i` uses
+`duel` runs deterministic, greedy (`τ = 0`) games (round `i` uses
 `--seed + i`) with no learning. The slide side and the spawn side are **separate
 nets, loaded independently**, so you can evaluate a checkpoint against itself or
 pit two different checkpoints against each other (e.g. a trained player against a
@@ -228,14 +252,14 @@ snapshot spawner).
 
 **Flags:**
 
-- `--slide-rater` (default `models.safetensors`) — net that picks slides (the
-  player), searched at `--slide-depth`.
+- `--slide-rater` (required) — net that picks slides (the player), searched at
+  `--slide-depth`.
 - `--slide-depth` (default `2`) — alpha-beta depth for the slide side.
-- `--spawn` (default `models.safetensors`) — net that picks spawns (the
-  adversary), searched at `--spawn-depth`.
+- `--spawn-rater` (required) — net that picks spawns (the adversary), searched
+  at `--spawn-depth`.
 - `--spawn-depth` (default `2`) — alpha-beta depth for the spawn side.
-- `--rounds` (default `100`) — number of games to play.
-- `--seed` (default `0x2048204820482048`) — round `i` uses `--seed + i`.
+- `--rounds` (default `128`) — number of games to play.
+- `--seed` (defaults to the wall clock) — round `i` uses `--seed + i`.
 
 A side whose checkpoint file is missing falls back to a fresh untrained net
 (`V ≡ 0`, i.e. ΔΦ-greedy minimax) with a note on stderr.

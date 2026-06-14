@@ -5,10 +5,10 @@ use z048::Rater;
 
 #[derive(Parser)]
 struct Args {
+    #[arg(long)]
+    rater: PathBuf,
     #[arg(long, num_args = 1.., default_values_t = [128usize, 32])]
     hidden: Vec<usize>,
-    #[arg(long, default_value = "models.safetensors")]
-    rater: PathBuf,
     #[arg(long, default_value_t = 0x2048_2048_2048_2048)]
     seed: u64,
 }

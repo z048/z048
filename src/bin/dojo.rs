@@ -8,10 +8,10 @@ use z048::Train;
 
 #[derive(Parser)]
 struct Args {
+    #[arg(long)]
+    rater: PathBuf,
     #[command(flatten)]
     train: Train,
-    #[arg(long, default_value = "models.safetensors")]
-    rater: PathBuf,
 }
 
 fn main() {
