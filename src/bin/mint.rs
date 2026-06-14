@@ -1,4 +1,3 @@
-use candle_core::Device;
 use clap::Parser;
 use std::path::PathBuf;
 use z048::Rater;
@@ -15,7 +14,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let rater = Rater::from((args.hidden.clone(), args.seed, Device::Cpu));
+    let rater = Rater::from((args.hidden.clone(), args.seed));
     if let Some(dir) = args.rater.parent() {
         if !dir.as_os_str().is_empty() {
             std::fs::create_dir_all(dir).expect("create checkpoint directory");

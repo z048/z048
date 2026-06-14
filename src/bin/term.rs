@@ -1,13 +1,11 @@
 use candle_core::Device;
-use candle_core::Var;
-use candle_nn::VarMap;
+use candle_core::safetensors::load;
 use clap::Parser;
 use rand::RngCore;
 use std::io::Read;
 use std::io::Write;
 use std::io::stdin;
 use std::io::stdout;
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
@@ -57,17 +55,6 @@ fn read_key() -> char {
         return s[1] as char;
     }
     b[0] as char
-}
-
-fn load_rater(path: &Path) -> Rater {
-    let varmap = VarMap::new();
-    {
-        let mut data = varmap.data().lock().expect("lock varmap data");
-        for (name, t) in candle_core::safetensors::load(path, &Device::Cpu).expect("load checkpoint safetensors") {
-            data.insert(name, Var::from_tensor(&t).expect("wrap checkpoint tensor as var"));
-        }
-    }
-    Rater::from((varmap, Device::Cpu))
 }
 
 fn draw(board: Board, cursor: Option<(usize, usize)>, rank: u8, header: &str, last: &str, prompt: &str) {
@@ -151,8 +138,8 @@ fn human_spawn(board: Board, header: &str, last: &str) -> Option<Spawn<4, 2>> {
 
 fn main() {
     let args = Args::parse();
-    let slide_rater: Option<Rater> = args.slide_rater.as_deref().map(load_rater);
-    let spawn_rater: Option<Rater> = args.spawn_rater.as_deref().map(load_rater);
+    let slide_rater: Option<Rater> = args.slide_rater.as_deref().map(|filename| Rater::from(load(filename, &Device::Cpu).expect("load checkpoint")));
+    let spawn_rater: Option<Rater> = args.spawn_rater.as_deref().map(|filename| Rater::from(load(filename, &Device::Cpu).expect("load checkpoint")));
     let slide_who = if slide_rater.is_some() { "AI" } else { "human" };
     let spawn_who = if spawn_rater.is_some() { "AI" } else { "human" };
     let mut dicer = Dicer::from(args.seed);

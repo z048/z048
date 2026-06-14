@@ -16,6 +16,7 @@ use candle_nn::Sequential;
 use candle_nn::VarMap;
 use candle_nn::seq;
 use rand::Rng;
+use std::collections::HashMap;
 use std::iter::once;
 use std::path::Path;
 
@@ -126,13 +127,45 @@ impl Rater {
     }
 }
 
+impl From<Vec<(String, Vec<usize>, Vec<f32>)>> for Rater {
+    fn from(value: Vec<(String, Vec<usize>, Vec<f32>)>) -> Self {
+        let varmap = VarMap::new();
+        {
+            let mut map = varmap.data().lock().expect("lock varmap data");
+            for (name, shape, data) in value {
+                map.insert(name, Var::from_tensor(&Tensor::from_vec(data, shape, &Device::Cpu).expect("build weight tensor")).expect("wrap checkpoint tensor as var"));
+            }
+        }
+        (varmap, Device::Cpu).into()
+    }
+}
+
+impl From<HashMap<String, Tensor>> for Rater {
+    fn from(value: HashMap<String, Tensor>) -> Self {
+        let varmap = VarMap::new();
+        {
+            let mut map = varmap.data().lock().expect("lock varmap data");
+            for (name, t) in value {
+                map.insert(name, Var::from_tensor(&t).expect("wrap checkpoint tensor as var"));
+            }
+        }
+        (varmap, Device::Cpu).into()
+    }
+}
+
+impl From<(Vec<usize>, u64)> for Rater {
+    fn from((hidden, seed): (Vec<usize>, u64)) -> Self {
+        (hidden, seed, Device::Cpu).into()
+    }
+}
+
 impl From<(Vec<usize>, u64, Device)> for Rater {
     fn from((hidden, seed, device): (Vec<usize>, u64, Device)) -> Self {
         let d: Vec<usize> = once(Self::INPUT).chain(hidden).chain(once(2)).collect();
         let varmap = VarMap::new();
         let mut dicer = Dicer::from(seed);
         {
-            let mut data = varmap.data().lock().expect("lock varmap data for init");
+            let mut map = varmap.data().lock().expect("lock varmap data for init");
             for i in 0..d.len() - 1 {
                 let w: Vec<f32> = if i + 2 < d.len() {
                     let lim = if i == 0 { (6.0f32 / 16.0).sqrt() } else { (6.0f32 / d[i] as f32).sqrt() };
@@ -140,8 +173,8 @@ impl From<(Vec<usize>, u64, Device)> for Rater {
                 } else {
                     vec![0.0; d[i] * d[i + 1]]
                 };
-                data.insert(format!("{i}.weight"), Var::from_tensor(&Tensor::from_vec(w, (d[i], d[i + 1]), &device).expect("build weight tensor")).expect("wrap weight tensor as var"));
-                data.insert(format!("{i}.bias"), Var::from_tensor(&Tensor::zeros(d[i + 1], DType::F32, &device).expect("build bias tensor")).expect("wrap bias tensor as var"));
+                map.insert(format!("{i}.weight"), Var::from_tensor(&Tensor::from_vec(w, (d[i], d[i + 1]), &device).expect("build weight tensor")).expect("wrap weight tensor as var"));
+                map.insert(format!("{i}.bias"), Var::from_tensor(&Tensor::zeros(d[i + 1], DType::F32, &device).expect("build bias tensor")).expect("wrap bias tensor as var"));
             }
         }
         Rater::from((varmap, device))

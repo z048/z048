@@ -189,8 +189,8 @@ RUSTFLAGS="-C target-cpu=native" cargo run --release --bin duel -- \
   --rounds 128
 ```
 
-If either checkpoint file is missing, `duel` falls back to a fresh untrained net
-for that side (`V ≡ 0`, i.e. ΔΦ-greedy minimax) and notes this on stderr.
+Both `--slide-rater` and `--spawn-rater` must point at existing checkpoints; a
+missing file is an error.
 
 ### 4. Play interactively
 
@@ -261,8 +261,8 @@ snapshot spawner).
 - `--rounds` (default `128`) — number of games to play.
 - `--seed` (defaults to the wall clock) — round `i` uses `--seed + i`.
 
-A side whose checkpoint file is missing falls back to a fresh untrained net
-(`V ≡ 0`, i.e. ΔΦ-greedy minimax) with a note on stderr.
+Both checkpoints must exist on disk; pointing at a missing file is an error (no
+fresh-net fallback).
 
 **Output:** per-round lines reporting `phi_final`, ply count, and max tile rank,
 followed by a summary (the histogram lists only tiles that actually occurred as
