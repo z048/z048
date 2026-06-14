@@ -1,9 +1,7 @@
 use candle_core::Device;
-use candle_core::Var;
-use candle_nn::VarMap;
+use candle_core::safetensors::load;
 use clap::Parser;
 use rand::Rng;
-use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -27,30 +25,10 @@ struct Args {
     seed: u64,
 }
 
-fn read_varmap(path: &Path) -> VarMap {
-    let varmap = VarMap::new();
-    {
-        let mut data = varmap.data().lock().expect("lock varmap data");
-        for (name, t) in candle_core::safetensors::load(path, &candle_core::Device::Cpu).expect("load checkpoint safetensors") {
-            data.insert(name, Var::from_tensor(&t).expect("wrap checkpoint tensor as var"));
-        }
-    }
-    varmap
-}
-
-fn load_rater(path: &Path, seed: u64) -> Rater {
-    if path.exists() {
-        Rater::from((read_varmap(path), Device::Cpu))
-    } else {
-        eprintln!("note: {} not found, using a fresh net (V≡0 ⇒ ΔΦ-greedy minimax)", path.display());
-        Rater::from((vec![128, 32], seed, Device::Cpu))
-    }
-}
-
 fn main() {
     let args = Args::parse();
-    let slide = load_rater(&args.slide_rater, args.seed);
-    let spawn = load_rater(&args.spawn_rater, args.seed);
+    let slide = Rater::from(load(&args.slide_rater, &Device::Cpu).expect("load checkpoint"));
+    let spawn = Rater::from(load(&args.spawn_rater, &Device::Cpu).expect("load checkpoint"));
     let mut results: Vec<(f64, usize, u64)> = Vec::with_capacity(args.rounds as usize);
     for round in 0..args.rounds {
         let mut dicer = Dicer::from(args.seed + round);

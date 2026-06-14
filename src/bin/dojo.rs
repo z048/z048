@@ -1,6 +1,5 @@
 use candle_core::Device;
-use candle_core::Var;
-use candle_nn::VarMap;
+use candle_core::safetensors::load;
 use clap::Parser;
 use std::path::PathBuf;
 use z048::Rater;
@@ -16,15 +15,8 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let varmap = VarMap::new();
     eprintln!("loading {}", args.rater.display());
-    {
-        let mut data = varmap.data().lock().expect("lock varmap data");
-        for (name, t) in candle_core::safetensors::load(&args.rater, &candle_core::Device::Cpu).expect("load checkpoint safetensors") {
-            data.insert(name, Var::from_tensor(&t).expect("wrap checkpoint tensor as var"));
-        }
-    }
-    let rater = Rater::from((varmap, Device::Cpu));
+    let rater = Rater::from(load(&args.rater, &Device::Cpu).expect("load checkpoint"));
     args.train.train_iter(&rater, |round, mut finals, losses| {
         let k = (args.train.train_steps / 10).clamp(1, losses.len());
         let l0 = losses[..k].iter().sum::<f32>() / k as f32;
