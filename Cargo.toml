@@ -1,0 +1,16 @@
+[package]
+name = "z048"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand = { version = "0.8", features = ["small_rng"] }
+clap = { version = "4.6.1", features = ["derive"] }
+candle-core = "0.10.2"
+candle-nn = "0.10.2"
+
+[profile.release]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 3
