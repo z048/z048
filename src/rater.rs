@@ -146,7 +146,13 @@ impl From<File> for Rater {
     fn from(mut value: File) -> Self {
         let mut bytes = Vec::new();
         value.read_to_end(&mut bytes).expect("read checkpoint file");
-        let layers: Vec<(Vec<f32>, Vec<f32>)> = postcard::from_bytes(&bytes).expect("deserialize postcard layers");
+        bytes.as_slice().into()
+    }
+}
+
+impl From<&[u8]> for Rater {
+    fn from(value: &[u8]) -> Self {
+        let layers: Vec<(Vec<f32>, Vec<f32>)> = postcard::from_bytes(&value).expect("deserialize postcard layers");
         layers.into()
     }
 }
