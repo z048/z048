@@ -1,61 +1,52 @@
+use crate::Board;
+use crate::Dicer;
 use crate::rater::Rater;
-use crate::{Board, Dicer};
 use candle_nn::Optimizer;
 use candle_nn::ParamsAdamW;
-use clap::Parser;
 use rand::Rng;
+use serde::Deserialize;
+use serde::Serialize;
 
-#[derive(Parser, Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Train {
-    #[arg(long, default_value_t = 0)]
-    pub num_round: usize,
-    #[arg(long, default_value_t = 64)]
-    pub play_games: usize,
-    #[arg(long, default_value_t = 2)]
-    pub search_depth: u8,
-    #[arg(long, default_value_t = 256)]
-    pub train_steps: usize,
-    #[arg(long, default_value_t = 256)]
-    pub batch_size: usize,
-    #[arg(long, default_value_t = 1_048_576)]
-    pub buffer_size: usize,
-    #[arg(long, default_value_t = 0x2048_2048_2048_2048)]
-    pub random_seed: u64,
-    #[arg(long, default_value_t = 0.8)]
-    pub td_lambda: f64,
-    #[arg(long, default_value_t = 1.0)]
-    pub tau_a: f64,
-    #[arg(long, default_value_t = 8.0)]
-    pub tau_h: f64,
-    #[arg(long, default_value_t = 0.02)]
-    pub tau_k: f64,
-    #[arg(long, default_value_t = 1e-3)]
-    pub adamw_lr: f64,
-    #[arg(long, default_value_t = 0.9)]
-    pub adamw_beta1: f64,
-    #[arg(long, default_value_t = 0.999)]
-    pub adamw_beta2: f64,
-    #[arg(long, default_value_t = 1e-8)]
-    pub adamw_eps: f64,
-    #[arg(long, default_value_t = 1e-4)]
-    pub adamw_wd: f64,
+    num_round: usize,
+    play_games: usize,
+    search_depth: u8,
+    train_steps: usize,
+    batch_size: usize,
+    buffer_size: usize,
+    random_seed: u64,
+    td_lambda: f64,
+    tau_a: f64,
+    tau_h: f64,
+    tau_k: f64,
+    adamw_lr: f64,
+    adamw_beta1: f64,
+    adamw_beta2: f64,
+    adamw_eps: f64,
+    adamw_wd: f64,
+}
+
+impl Default for Train {
+    fn default() -> Self {
+        Self { num_round: 0, play_games: 64, search_depth: 2, train_steps: 256, batch_size: 256, buffer_size: 1_048_576, random_seed: 0x2048_2048_2048_2048, td_lambda: 0.8, tau_a: 1.0, tau_h: 8.0, tau_k: 0.02, adamw_lr: 1e-3, adamw_beta1: 0.9, adamw_beta2: 0.999, adamw_eps: 1e-8, adamw_wd: 1e-4 }
+    }
 }
 
 impl Train {
-    pub fn train_iter(self, rater: &Rater, callback: impl Fn(usize, Vec<f64>, Vec<f32>)) {
+    pub fn train(self, rater: &Rater, callback: impl Fn(usize, Vec<f32>)) {
         let mut dicer = Dicer::from(self.random_seed);
         let mut opt = rater.adamw(ParamsAdamW { lr: self.adamw_lr, beta1: self.adamw_beta1, beta2: self.adamw_beta2, eps: self.adamw_eps, weight_decay: self.adamw_wd });
         let mut rows: Vec<(Board, f32, f32)> = Vec::new();
         let mut next = 0usize;
-        let mut round = 0;
-        while self.num_round == 0 || round < self.num_round {
-            let mut games = Vec::with_capacity(self.play_games);
+        for round in 0..self.num_round {
             for _ in 0..self.play_games {
                 let mut board = Board::from(dicer.random::<u64>());
                 let mut afters: Vec<(Board, f64)> = Vec::new();
                 let mut befores: Vec<(Board, f64)> = Vec::new();
                 let mut ply = 0usize;
-                let final_phi = loop {
+                loop {
                     let tau = self.tau_a / (ply as f64 + self.tau_h) + self.tau_k;
                     let before_phi = board.score();
 
@@ -70,7 +61,7 @@ impl Train {
                     let next_phi = next_board.score();
                     afters.push((after, next_phi - after_phi));
                     if next_board.end() {
-                        break next_phi;
+                        break;
                     }
                     board = next_board;
                 };
@@ -94,7 +85,6 @@ impl Train {
                     g_before = befores[t].1 + (1.0 - lam) * va[t][0] as f64 + lam * g_after;
                     put((befores[t].0, 1.0, g_before as f32));
                 }
-                games.push(final_phi);
             }
 
             let mut losses = Vec::with_capacity(self.train_steps);
@@ -107,8 +97,7 @@ impl Train {
                 losses.push(loss.to_scalar::<f32>().expect("read scalar loss value"));
                 opt.backward_step(&loss).expect("run AdamW backward step on loss");
             }
-            callback(round, games, losses);
-            round += 1;
+            callback(round, losses);
         }
     }
 }

@@ -1,7 +1,6 @@
-use candle_core::Device;
-use candle_core::safetensors::load;
 use clap::Parser;
 use rand::Rng;
+use std::fs::File;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -27,8 +26,8 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let slide = Rater::from(load(&args.slide_rater, &Device::Cpu).expect("load checkpoint"));
-    let spawn = Rater::from(load(&args.spawn_rater, &Device::Cpu).expect("load checkpoint"));
+    let slide = Rater::from(File::open(args.slide_rater).expect("load checkpoint"));
+    let spawn = Rater::from(File::open(args.spawn_rater).expect("load checkpoint"));
     let mut results: Vec<(f64, usize, u64)> = Vec::with_capacity(args.rounds as usize);
     for round in 0..args.rounds {
         let mut dicer = Dicer::from(args.seed + round);
