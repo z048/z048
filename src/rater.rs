@@ -16,7 +16,9 @@ use candle_nn::Sequential;
 use candle_nn::VarMap;
 use candle_nn::seq;
 use rand::Rng;
-use std::collections::HashMap;
+use std::fs::File;
+use std::fs::write;
+use std::io::Read;
 use std::iter::once;
 use std::path::Path;
 
@@ -87,7 +89,20 @@ impl Rater {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) {
-        self.varmap.save(path).expect("save checkpoint to safetensors")
+        let mut layers = vec![];
+        {
+            let map = self.varmap.data().lock().expect("lock varmap data");
+            let mut i = 0;
+            while let Some(w) = map.get(&format!("{i}.weight")) {
+                let b = map.get(&format!("{i}.bias")).unwrap_or_else(|| panic!("missing {i}.bias"));
+                let weight = w.as_tensor().flatten_all().expect("flatten weight").to_vec1::<f32>().expect("read weight values");
+                let bias = b.as_tensor().flatten_all().expect("flatten bias").to_vec1::<f32>().expect("read bias values");
+                layers.push((weight, bias));
+                i += 1;
+            }
+        }
+        let bytes = postcard::to_allocvec(&layers).expect("serialize layers to postcard");
+        write(path, bytes).expect("write postcard layers");
     }
 
     fn minimize(&self, board: Board, depth: u8, (alpha, mut beta): (f64, f64)) -> f64 {
@@ -127,26 +142,25 @@ impl Rater {
     }
 }
 
-impl From<Vec<(String, Vec<usize>, Vec<f32>)>> for Rater {
-    fn from(value: Vec<(String, Vec<usize>, Vec<f32>)>) -> Self {
-        let varmap = VarMap::new();
-        {
-            let mut map = varmap.data().lock().expect("lock varmap data");
-            for (name, shape, data) in value {
-                map.insert(name, Var::from_tensor(&Tensor::from_vec(data, shape, &Device::Cpu).expect("build weight tensor")).expect("wrap checkpoint tensor as var"));
-            }
-        }
-        (varmap, Device::Cpu).into()
+impl From<File> for Rater {
+    fn from(mut value: File) -> Self {
+        let mut bytes = Vec::new();
+        value.read_to_end(&mut bytes).expect("read checkpoint file");
+        let layers: Vec<(Vec<f32>, Vec<f32>)> = postcard::from_bytes(&bytes).expect("deserialize postcard layers");
+        layers.into()
     }
 }
 
-impl From<HashMap<String, Tensor>> for Rater {
-    fn from(value: HashMap<String, Tensor>) -> Self {
+impl From<Vec<(Vec<f32>, Vec<f32>)>> for Rater {
+    fn from(value: Vec<(Vec<f32>, Vec<f32>)>) -> Self {
         let varmap = VarMap::new();
         {
             let mut map = varmap.data().lock().expect("lock varmap data");
-            for (name, t) in value {
-                map.insert(name, Var::from_tensor(&t).expect("wrap checkpoint tensor as var"));
+            for (i, (weight, bias)) in value.into_iter().enumerate() {
+                let out = bias.len();
+                let inp = weight.len() / out;
+                map.insert(format!("{i}.weight"), Var::from_tensor(&Tensor::from_vec(weight, (inp, out), &Device::Cpu).expect("build weight tensor")).expect("wrap weight tensor as var"));
+                map.insert(format!("{i}.bias"), Var::from_tensor(&Tensor::from_vec(bias, out, &Device::Cpu).expect("build bias tensor")).expect("wrap bias tensor as var"));
             }
         }
         (varmap, Device::Cpu).into()

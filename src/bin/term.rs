@@ -1,7 +1,6 @@
-use candle_core::Device;
-use candle_core::safetensors::load;
 use clap::Parser;
-use rand::RngCore;
+use rand::Rng;
+use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::io::stdin;
@@ -138,12 +137,12 @@ fn human_spawn(board: Board, header: &str, last: &str) -> Option<Spawn<4, 2>> {
 
 fn main() {
     let args = Args::parse();
-    let slide_rater: Option<Rater> = args.slide_rater.as_deref().map(|filename| Rater::from(load(filename, &Device::Cpu).expect("load checkpoint")));
-    let spawn_rater: Option<Rater> = args.spawn_rater.as_deref().map(|filename| Rater::from(load(filename, &Device::Cpu).expect("load checkpoint")));
+    let slide_rater: Option<Rater> = args.slide_rater.as_deref().map(|filename| Rater::from(File::open(filename).expect("load checkpoint")));
+    let spawn_rater: Option<Rater> = args.spawn_rater.as_deref().map(|filename| Rater::from(File::open(filename).expect("load checkpoint")));
     let slide_who = if slide_rater.is_some() { "AI" } else { "human" };
     let spawn_who = if spawn_rater.is_some() { "AI" } else { "human" };
     let mut dicer = Dicer::from(args.seed);
-    let mut board = Board::from(dicer.next_u64());
+    let mut board = Board::from(dicer.random::<u64>());
 
     let human = slide_rater.is_none() || spawn_rater.is_none();
     if human {

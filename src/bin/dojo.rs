@@ -1,6 +1,7 @@
-use candle_core::Device;
-use candle_core::safetensors::load;
 use clap::Parser;
+use serde_json::from_reader;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
 use z048::Rater;
 use z048::Train;
@@ -9,22 +10,23 @@ use z048::Train;
 struct Args {
     #[arg(long)]
     rater: PathBuf,
-    #[command(flatten)]
-    train: Train,
+    #[arg(long)]
+    train: PathBuf,
 }
 
 fn main() {
     let args = Args::parse();
     eprintln!("loading {}", args.rater.display());
-    let rater = Rater::from(load(&args.rater, &Device::Cpu).expect("load checkpoint"));
-    args.train.train_iter(&rater, |round, mut finals, losses| {
-        let k = (args.train.train_steps / 10).clamp(1, losses.len());
-        let l0 = losses[..k].iter().sum::<f32>() / k as f32;
-        let l1 = losses[losses.len() - k..].iter().sum::<f32>() / k as f32;
-        rater.save(&args.rater);
-        finals.sort_by(f64::total_cmp);
-        let mean = finals.iter().sum::<f64>() / finals.len() as f64;
-        let median = finals[finals.len() / 2];
-        eprintln!("round {round}: phi_final mean {mean:.3} median {median:.3} loss {l0:.5} -> {l1:.5}");
-    });
+    let file = File::open(&args.train).expect("open train config");
+    let trains: Vec<Train> = from_reader(BufReader::new(file)).expect("parse train config");
+    let rater = Rater::from(File::open(&args.rater).expect("load checkpoint"));
+    for (stage, train) in trains.into_iter().enumerate() {
+        train.train(&rater, |round, losses| {
+            let k = (losses.len() / 4).max(1);
+            let l0 = losses[..k].iter().sum::<f32>() / k as f32;
+            let l1 = losses[losses.len() - k..].iter().sum::<f32>() / k as f32;
+            rater.save(args.rater.with_extension(format!("s{stage}.r{round}.bin")));
+            eprintln!("stage {stage} round {round}: loss {l0:.5} -> {l1:.5}");
+        });
+    }
 }
